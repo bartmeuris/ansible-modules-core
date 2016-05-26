@@ -41,11 +41,13 @@ options:
     - prepend the linode ID to the name
     default: True
     type: bool
+    version_added: "2.2"
   name_id_separator:
     description:
     - The separator to use when automatically adding an ID.
     default: '_'
     type: string
+    version_added: "2.2"
   linode_id:
     description:
      - Unique ID of a linode server
@@ -93,6 +95,7 @@ options:
      - "Bool, add an additional, private network interface to instance for inter-node communication"
     default: "no"
     choices: [ "yes", "no" ]
+    version_added: "2.2"
   wait:
     description:
      - wait for the instance to be in state 'running' before returning
@@ -228,8 +231,9 @@ def getInstanceDetails(api, server):
                                         'ip_id': ip['IPADDRESSID']})
     return instance
 
-def linodeServers(module, api, state, name, name_add_id, name_id_separator, plan, distribution,
-                  datacenter, private_networking, linode_id, payment_term, password, ssh_pub_key, swap, wait, wait_timeout):
+def linodeServers(module, api, state, name, name_add_id, name_id_separator, plan,
+                  distribution, datacenter, private_networking, linode_id, payment_term,
+                  password, ssh_pub_key, swap, wait, wait_timeout):
     instances = []
     changed = False
     new_server = False
