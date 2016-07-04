@@ -219,6 +219,25 @@ def ensure_yum_utils(module):
 
     return repoquerybin
 
+def fetch_rpm_from_url(spec, module=None):
+    # download package so that we can query it
+    tempdir = tempfile.mkdtemp()
+    package = os.path.join(tempdir, str(spec.rsplit('/', 1)[1]))
+    try:
+        rsp, info = fetch_url(module, spec)
+        f = open(package, 'w')
+        data = rsp.read(BUFSIZE)
+        while data:
+            f.write(data)
+            data = rsp.read(BUFSIZE)
+        f.close()
+    except Exception:
+        e = get_exception()
+        shutil.rmtree(tempdir)
+        if module:
+            module.fail_json(msg="Failure downloading %s, %s" % (spec, e))
+    return package
+
 def po_to_nevra(po):
 
     if hasattr(po, 'ui_nevra'):
@@ -245,7 +264,8 @@ def is_installed(module, repoq, pkgspec, conf_file, qf=def_qf, en_repos=None, di
             pkgs = e + m
             if not pkgs and not is_pkg:
                 pkgs.extend(my.returnInstalledPackagesByDep(pkgspec))
-        except Exception, e:
+        except Exception:
+            e = get_exception()
             module.fail_json(msg="Failure talking to yum: %s" % e)
 
         return [ po_to_nevra(p) for p in pkgs ]
@@ -301,7 +321,8 @@ def is_available(module, repoq, pkgspec, conf_file, qf=def_qf, en_repos=None, di
             pkgs = e + m
             if not pkgs:
                 pkgs.extend(my.returnPackagesByDep(pkgspec))
-        except Exception, e:
+        except Exception:
+            e = get_exception()
             module.fail_json(msg="Failure talking to yum: %s" % e)
             
         return [ po_to_nevra(p) for p in pkgs ]
@@ -348,7 +369,8 @@ def is_update(module, repoq, pkgspec, conf_file, qf=def_qf, en_repos=None, dis_r
                 e,m,u = my.pkgSack.matchPackageNames([pkgspec])
                 pkgs = e + m
             updates = my.doPackageLists(pkgnarrow='updates').updates 
-        except Exception, e:
+        except Exception:
+            e = get_exception()
             module.fail_json(msg="Failure talking to yum: %s" % e)
 
         for pkg in pkgs:
@@ -381,6 +403,13 @@ def what_provides(module, repoq, req_spec, conf_file,  qf=def_qf, en_repos=None,
     if dis_repos is None:
         dis_repos = []
 
+    if req_spec.endswith('.rpm') and '://' not in req_spec:
+        return req_spec
+
+    elif '://' in req_spec:
+        local_path = fetch_rpm_from_url(req_spec, module=module)
+        return local_path
+
     if not repoq:
 
         pkgs = []
@@ -399,7 +428,8 @@ def what_provides(module, repoq, req_spec, conf_file,  qf=def_qf, en_repos=None,
                 e,m,u = my.rpmdb.matchPackageNames([req_spec])
                 pkgs.extend(e)
                 pkgs.extend(m)
-        except Exception, e:
+        except Exception:
+            e = get_exception()
             module.fail_json(msg="Failure talking to yum: %s" % e)
 
         return set([ po_to_nevra(p) for p in pkgs ])
@@ -570,6 +600,7 @@ def install(module, items, repoq, yum_basecmd, conf_file, en_repos, dis_repos):
                 module.fail_json(**res)
 
             pkg_name = local_name(module, spec)
+
             # look for them in the rpmdb
             if is_installed(module, repoq, pkg_name, conf_file, en_repos=en_repos, dis_repos=dis_repos):
                 # if they are there, skip it
@@ -579,19 +610,7 @@ def install(module, items, repoq, yum_basecmd, conf_file, en_repos, dis_repos):
         # URL
         elif '://' in spec:
             # download package so that we can check if it's already installed
-            package = os.path.join(tempdir, str(spec.rsplit('/', 1)[1]))
-            try:
-                rsp, info = fetch_url(module, spec)
-                f = open(package, 'w')
-                data = rsp.read(BUFSIZE)
-                while data:
-                    f.write(data)
-                    data = rsp.read(BUFSIZE)
-                f.close()
-            except Exception, e:
-                shutil.rmtree(tempdir)
-                module.fail_json(msg="Failure downloading %s, %s" % (spec, e))
-
+            package = fetch_rpm_from_url(spec, module=module)
             pkg_name = local_name(module, package)
             if is_installed(module, repoq, pkg_name, conf_file, en_repos=en_repos, dis_repos=dis_repos):
                 # if it's there, skip it
@@ -664,7 +683,8 @@ def install(module, items, repoq, yum_basecmd, conf_file, en_repos, dis_repos):
             # Remove rpms downloaded for EL5 via url
             try:
                 shutil.rmtree(tempdir)
-            except Exception, e:
+            except Exception:
+                e = get_exception()
                 module.fail_json(msg="Failure deleting temp directory %s, %s" % (tempdir, e))
 
             module.exit_json(changed=True, results=res['results'], changes=dict(installed=pkgs))
@@ -704,7 +724,8 @@ def install(module, items, repoq, yum_basecmd, conf_file, en_repos, dis_repos):
     # Remove rpms downloaded for EL5 via url
     try:
         shutil.rmtree(tempdir)
-    except Exception, e:
+    except Exception:
+        e = get_exception()
         module.fail_json(msg="Failure deleting temp directory %s, %s" % (tempdir, e))
 
     return res
@@ -959,9 +980,11 @@ def ensure(module, state, pkgs, conf_file, enablerepo, disablerepo,
                             rid = my.repos.getRepo(i)
                             a = rid.repoXML.repoid
                     current_repos = new_repos
-                except yum.Errors.YumBaseError, e:
+                except yum.Errors.YumBaseError:
+                    e = get_exception()
                     module.fail_json(msg="Error setting/accessing repos: %s" % (e))
-        except yum.Errors.YumBaseError, e:
+        except yum.Errors.YumBaseError:
+            e = get_exception()
             module.fail_json(msg="Error accessing repos: %s" % e)
     if state in ['installed', 'present']:
         if disable_gpg_check:

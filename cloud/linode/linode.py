@@ -51,7 +51,7 @@ options:
   linode_id:
     description:
      - Unique ID of a linode server
-    aliases: lid
+    aliases: [ 'lid' ]
     default: null
     type: integer
   plan:
@@ -297,7 +297,7 @@ def linodeServers(module, api, state, name, name_add_id, name_id_separator, plan
 
                 # Save server
                 servers = api.linode_list(LinodeId=linode_id)
-            except Exception, e:
+            except Exception as e:
                 module.fail_json(msg = '%s' % e.value[0]['ERRORMESSAGE'])
 
         if not disks:
@@ -329,7 +329,7 @@ def linodeServers(module, api, state, name, name_add_id, name_id_separator, plan
                                              Label='%s swap disk (lid: %s)' % (name, linode_id),
                                              Size=swap)
                 jobs.append(res['JobID'])
-            except Exception, e:
+            except Exception as e:
                 # TODO: destroy linode ?
                 module.fail_json(msg = '%s' % e.value[0]['ERRORMESSAGE'])
 
@@ -372,7 +372,7 @@ def linodeServers(module, api, state, name, name_add_id, name_id_separator, plan
                 api.linode_config_create(LinodeId=linode_id, KernelId=kernel_id,
                                          Disklist=disks_list, Label='%s config' % name)
                 configs = api.linode_config_list(LinodeId=linode_id)
-            except Exception, e:
+            except Exception as e:
                 module.fail_json(msg = '%s' % e.value[0]['ERRORMESSAGE'])
 
         # Start / Ensure servers are running
@@ -433,7 +433,7 @@ def linodeServers(module, api, state, name, name_add_id, name_id_separator, plan
             if server['STATUS'] != 2:
                 try:
                     res = api.linode_shutdown(LinodeId=linode_id)
-                except Exception, e:
+                except Exception as e:
                     module.fail_json(msg = '%s' % e.value[0]['ERRORMESSAGE'])
                 instance['status'] = 'Stopping'
                 changed = True
@@ -453,7 +453,7 @@ def linodeServers(module, api, state, name, name_add_id, name_id_separator, plan
             instance = getInstanceDetails(api, server)
             try:
                 res = api.linode_reboot(LinodeId=server['LINODEID'])
-            except Exception, e:
+            except Exception as e:
                 module.fail_json(msg = '%s' % e.value[0]['ERRORMESSAGE'])
             instance['status'] = 'Restarting'
             changed = True
@@ -464,7 +464,7 @@ def linodeServers(module, api, state, name, name_add_id, name_id_separator, plan
             instance = getInstanceDetails(api, server)
             try:
                 api.linode_delete(LinodeId=server['LINODEID'], skipChecks=True)
-            except Exception, e:
+            except Exception as e:
                 module.fail_json(msg = '%s' % e.value[0]['ERRORMESSAGE'])
             instance['status'] = 'Deleting'
             changed = True
@@ -525,14 +525,14 @@ def main():
     if not api_key:
         try:
             api_key = os.environ['LINODE_API_KEY']
-        except KeyError, e:
+        except KeyError as e:
             module.fail_json(msg = 'Unable to load %s' % e.message)
 
     # setup the auth
     try:
         api = linode_api.Api(api_key)
         api.test_echo()
-    except Exception, e:
+    except Exception as e:
         module.fail_json(msg = '%s' % e.value[0]['ERRORMESSAGE'])
 
     linodeServers(module, api, state, name, name_add_id, name_id_separator, plan,
